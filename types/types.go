@@ -18,4 +18,5 @@ type WSMessage struct {
 type PlayerState struct {
     HP int `json:"health"`
     Position Position `json:"position"`
+    SessionID int `json:"sessionid"`
 }

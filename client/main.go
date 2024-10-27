@@ -2,11 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"math/rand/v2"
-	"time"
-
 	"github.com/Ace-Extrenof/gameserver/types"
 	"github.com/gorilla/websocket"
 )
@@ -15,7 +14,6 @@ type GameClient struct {
     conn *websocket.Conn
     clientID int
     username string
-    position types.Position
 }
 
 const wsServerEndpoint = "ws://localhost:8000/ws"
@@ -56,34 +54,36 @@ func main() {
     if err != nil {
         log.Fatalf("Failed to upgrade conn : %v", err)
     }
+    defer conn.Close()
 
     c := newGameClient(conn, "James")
     if err := c.login(); err != nil {
         log.Fatal(err)
     }
 
-    for {
-        x := rand.IntN(math.MaxInt)
-        y := rand.IntN(math.MaxInt)
-        state := types.PlayerState{
-            HP: 100,
-            Position: types.Position{X: x, Y: y},
+    go func() {
+        var msg types.WSMessage
+
+        for {
+            if err := c.conn.ReadJSON(&msg); err != nil {
+                fmt.Println("WS read err:", err)
+                continue
+            }
+            switch msg.Type {
+            case "state":
+                var state types.PlayerState
+                if err := json.Unmarshal(msg.Data, &state); err != nil {
+                    fmt.Println("WS read err")
+                    continue
+                }
+                fmt.Println("need to update state of player", state)
+
+            default:
+                fmt.Println("receiving unknown message")
+            }
         }
 
-        b, err := json.Marshal(state)
+    }()
 
-        if err != nil {
-            log.Fatalf("data send err: %v", err)
-        }
-
-        msg := types.WSMessage {
-            Type: "playerState",
-            Data: b,
-        }
-
-        if err := conn.WriteJSON(msg); err != nil {
-            log.Fatal("write err")
-        }
-        time.Sleep(time.Millisecond * 120)
-    }
+    select {}
 }
