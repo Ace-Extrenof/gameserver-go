@@ -1,22 +1,25 @@
 package types
 
+import "encoding/json"
+
 type Login struct {
     ClientID int `json:"clientid"`
     Username string `json:"username"`
 }
 
 type Position struct {
-    X int `json:"x"`
-    Y int `json:"y"`
+    X float64 `json:"x"`
+    Y float64 `json:"y"`
 }
 
 type WSMessage struct {
     Type string `json:"type"`
-    Data []byte `json:"data"`
+    Data json.RawMessage `json:"data"`
 }
 
 type PlayerState struct {
     HP int `json:"health"`
     Position Position `json:"position"`
     SessionID int `json:"sessionid"`
+    ClientID int `json:"clientid"`
 }

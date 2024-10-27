@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math"
-	"math/rand/v2"
 	"net/http"
 	"sync"
 
@@ -137,6 +135,9 @@ func (s *GameServer) startHTTP() {
     }()
 }
 
+var clientID int
+var clients = make(map[*websocket.Conn]types.PlayerState)
+
 func (s *GameServer) handleWS(w http.ResponseWriter, r *http.Request) {
     var upgrader = websocket.Upgrader{
         ReadBufferSize: 1024,
@@ -152,28 +153,59 @@ func (s *GameServer) handleWS(w http.ResponseWriter, r *http.Request) {
     defer conn.Close()
 
     s.mu.Lock()
-    s.clients[conn] = true
+    clientID = len(clients) + 1
+    clients[conn] = types.PlayerState{ClientID: clientID, Position: types.Position{X: 0, Y: 0}}
     s.mu.Unlock()
 
-    fmt.Println("new client connected")
-
     for {
-        _, msg, err := conn.ReadMessage()
+        var msg types.WSMessage
+        err := conn.ReadJSON(&msg)
+
         if err != nil {
             fmt.Println("err reading msg:", err)
             break
         }
-        fmt.Printf("received msg: %s\n", msg)
-    }
 
-    sid := rand.IntN(math.MaxInt)
-    pid := s.ctx.SpawnChild(newPlayerSession(s.ctx.PID(), sid, conn), fmt.Sprintf("session_%d", sid))
-    s.sessions[sid] = pid
+        switch msg.Type {
+        case "update":
+            var state types.PlayerState
+            if err := json.Unmarshal(msg.Data, &state); err != nil {
+                fmt.Println("err unmarshaling state:", err)
+                break
+            }
+            s.mu.Lock()
+            clients[conn] = state
+            s.mu.Unlock()
+            broadcastState()
+        }
+    }
 
     s.mu.Lock()
     delete(s.clients, conn)
     s.mu.Unlock()
     fmt.Println("client disconnected")
+}
+
+func broadcastState() {
+    var mu sync.Mutex
+
+    mu.Lock()
+    defer mu.Unlock()
+
+    for conn := range clients {
+        for otherConn, otherState := range clients {
+            if conn != otherConn {
+                msg := types.WSMessage{
+                    Type: "state",
+                    Data: []byte(fmt.Sprintf(`{"clientid": %d, "x": %f, "y": %f}`, otherState.ClientID, otherState.Position.X, otherState.Position.Y)),
+                }
+                if err := conn.WriteJSON(msg); err != nil {
+                    fmt.Println("err writing msg:", err)
+                }
+            }
+
+        }
+    }
 }
 
 func main() {
