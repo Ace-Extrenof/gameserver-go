@@ -9,5 +9,4 @@ server:
 	@./bin/server
 
 test:
-	@go build -o bin/test test/main.go
-	@./bin/test
+	@cd client; python3 -m http.server 8001

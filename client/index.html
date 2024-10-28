@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multiplayer Game</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        #gameContainer {
+            position: relative;
+        }
+        .player {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer"></div>
+
+    <script>
+        let clientId = null;
+        let players = {};
+        const gameContainer = document.getElementById('gameContainer');
+
+        // Connect to WebSocket server
+        const ws = new WebSocket('ws://localhost:8000/ws');
+
+        ws.onopen = () => {
+            console.log('Connected to server');
+        };
+
+        ws.onclose = () => {
+            console.log('Disconnected from server');
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            console.log('Received message:', message);
+
+            switch (message.type) {
+                case 'init':
+                    clientId = message.data.clientId;
+                    console.log('Received client ID:', clientId);
+                    createPlayer(clientId, 100, 100); // Create initial player
+                    break;
+
+                case 'playerState':
+                    const { clientId: playerId, x, y } = message.data;
+                    updatePlayerPosition(playerId, x, y);
+                    break;
+            }
+        };
+
+        function createPlayer(id, x, y) {
+            if (!players[id]) {
+                const playerElement = document.createElement('div');
+                playerElement.className = 'player';
+                playerElement.style.left = x + 'px';
+                playerElement.style.top = y + 'px';
+                gameContainer.appendChild(playerElement);
+                players[id] = playerElement;
+            }
+        }
+
+        function updatePlayerPosition(id, x, y) {
+            if (!players[id]) {
+                createPlayer(id, x, y);
+            }
+            players[id].style.left = x + 'px';
+            players[id].style.top = y + 'px';
+        }
+
+        // Handle player movement
+        document.addEventListener('mousemove', (e) => {
+            if (!clientId) return;
+
+            const rect = gameContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            console.log('sending pos', x, y)
+
+            // Update local player position
+            updatePlayerPosition(clientId, x, y);
+
+            // Send position to server
+            ws.send(JSON.stringify({
+                type: 'playerState',
+                data: { x, y }
+            }));
+        });
+
+        // Set initial game container size
+        gameContainer.style.width = '800px';
+        gameContainer.style.height = '600px';
+    </script>
+</body>
+</html>
